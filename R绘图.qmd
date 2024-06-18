@@ -1,0 +1,281 @@
+---
+title: "R绘图"
+author: "Lzp"
+format: gfm
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+## 1.柱状图
+
+### 1. 1导入数据
+
+采用了R语言自带数据集iris。该数据集采集了三个品种的鸢尾花的花瓣和花萼长宽数据，共5列，150行。
+
+```{r}
+
+#导入数据
+data("iris")#iris是R自带数据集
+head(iris)#查看数据，Species为分组信息
+```
+
+### 1.2 barplot()函数绘图 
+
+用barplot绘图时要注意，barplot只能接收一个向量或矩阵，所以在绘图前需要把数据框转换为矩阵。
+
+```{r}
+
+#barplot()绘制条形图
+iris_mean <- aggregate(cbind(Sepal.Length,Sepal.Width,Petal.Length,Petal.Width)~Species,
+                       data = iris,mean)#计算各组的平均值
+rownames(iris_mean) <- iris_mean$Species#把分组信息设置为行名
+iris_mean <- as.matrix(iris_mean[,-1])#转换为矩阵，barplot接收一个向量或矩阵
+
+barplot((t(iris_mean))[-c(2,3,4),],beside = T,
+        col = c('#1b80ad','#9c5555','#0c3c5f'),
+        ylab = 'Sepal.Length')
+```
+
+```{r}
+
+barplot(iris_mean,beside = T,
+        col = c("#1b80ad", "#ea5b57", "#0c3c5f","#9c5555"),
+        legend.text = T)
+```
+
+### 1.3 ggplot2包绘图
+
+```{r}
+
+library(ggplot2)
+ggplot(iris,aes(x = Species,y = Sepal.Length))+
+  geom_bar(aes(fill = Species),stat = "identity")+
+  scale_fill_manual(values = c("#1b80ad","#9c5555","#0c3c5f"))+
+  theme_bw()+
+  theme(legend.position = "none")
+```
+
+用ggplot包复现上述图2，需要把宽数据变为长数据，即把两个分组信息变成列，数据转换时需要用到tidyverse包。(ggplot偏爱长数据)
+
+```{r}
+
+library(tidyverse)
+iris_longer <- iris %>%
+  pivot_longer(
+    cols = !Species,
+    names_to = "Size",
+    values_to = "Values"
+  )
+head(iris_longer)
+```
+
+```{r}
+
+ggplot(iris_longer, aes(Size, Values))+
+  geom_bar(aes(fill = Species),stat = "identity",position = "dodge",width = 0.8)+
+  scale_fill_manual(values = c("#1b80ad", "#ea5b57", "#0c3c5f"))+
+  theme_bw()+
+  theme(axis.title = element_blank(),
+        legend.position = c(0.9,0.85))
+```
+
+## 2. 柱状图添加误差棒
+
+### 2.1 导入数据
+
+### 2.2 geom_errorbar()添加误差棒 
+
+ggplot包绘制的柱状图添加误差棒要相对简单一些，但仍然要提前计算均值和标准差。同样，若要给不同品种的Sepal.Length添加误差棒，只需使用stat_summary函数即可
+
+```{r}
+
+ggplot(iris,aes(x = Species,y = Sepal.Length))+
+  geom_bar(aes(fill = Species),stat = "summary")+
+  stat_summary(geom = "errorbar", 
+               fun.max = function(x)mean(x)+sd(x),
+               fun.min = function(x)mean(x)-sd(x),
+               width = 0.2)+
+  scale_fill_manual(values = c("#1b80ad","#9c5555","#0c3c5f"))+
+  theme_bw()+
+  theme(legend.position = "none")
+```
+
+若要给所有分组数据同时添加，则可以用下列函数先计算均值和标准差
+
+```{r}
+
+#宽数据转换为长数据
+library(tidyverse)
+iris_longer <- iris %>%
+  pivot_longer(
+    cols = !Species,
+    names_to = "Size",
+    values_to = "Values")
+#计算均值和标准差，并存储与error中
+error <- iris_longer %>%    
+  group_by(Size,Species) %>%   #分组信息 
+  summarise(iris_mean = mean(Values),
+            iris_sd = sd(Values))
+```
+
+采用geom_errorbar添加误差棒，注意position是为了让误差棒和对应的柱状图对齐
+
+```{r}
+
+ggplot(error, aes(Size, iris_mean))+
+  geom_bar(aes(fill = Species),stat = "identity",position = "dodge",width = 0.8)+
+  geom_errorbar(aes(ymin = iris_mean-iris_sd, ymax = iris_mean+iris_sd,group = Species),
+                position = position_dodge(0.8),width = 0.3)+
+  scale_fill_manual(values = c("#1b80ad", "#ea5b57", "#0c3c5f"))+
+  theme_bw()+
+  theme(axis.title = element_blank(),
+        legend.position = c(0.9,0.85))
+```
+
+## 3.画箱线图(不用ggplot)
+
+### 3.1 导入数据
+
+### 3.2 分组绘制不同测量值的箱线图 
+
+```{r}
+
+#绘制不同Species的Sepal.Length
+boxplot(Sepal.Length~Species,data = iris,#“~”前是数值，其后是分组信息
+        col = c('#1b80ad','#9c5555','#0c3c5f'),
+        boxwex = 0.5,#每一个箱线图的宽度
+        xlab = NULL)
+#只需把Sepal.Length换成别的测量类型即可
+boxplot(Sepal.Width~Species,data = iris,
+        col = c('#1b80ad','#9c5555','#0c3c5f'),
+        boxwex = 0.5,
+        xlab = NULL)
+boxplot(Petal.Length~Species,data = iris,
+        col = c('#1b80ad','#9c5555','#0c3c5f'),
+        boxwex = 0.5,
+        xlab = NULL)
+boxplot(Petal.Width~Species,data = iris,
+        col = c('#1b80ad','#9c5555','#0c3c5f'),
+        boxwex = 0.5,
+        xlab = NULL)
+```
+
+### 3.3 一图绘制上述四图 
+
+```{r}
+
+library(tidyverse)
+iris_longer <- iris %>% 
+  pivot_longer(
+    cols = !Species, 
+    names_to = "Size", 
+    values_to = "Values")
+ head(iris_longer)
+```
+
+然后只需在"\~"后增加一个分组信息即可，用names对横坐标进行重命名，并用legend()在右上角添加图例信息
+
+```{r}
+
+boxplot(Values~Species:Size,data = iris_longer,#先按照测量类型分为四类，每一类再按照物种分类
+        col = c('#1b80ad','#9c5555','#0c3c5f'),#颜色设置
+        names = c("Se.PL","Vi.PL","Ve.PL","Se.PW","Vi.PW","Ve.PW",
+                  "Se.SL","Vi.SL","Ve.SL","Se.SW","Vi.SW","Ve.SW"),
+        boxwex = 0.6,#宽度
+        xlab = NULL)
+legend("topright",#设置图例位于右上角
+       legend = c("setosa","virginica","versicolor"),#组别名称
+       col = c('#1b80ad','#9c5555','#0c3c5f'),#图例颜色
+       pch = c(20,20,20))#图例的形状
+```
+
+### 3.4  增加抖动散点 
+
+在boxplot上添加抖动散点，我们需要用到points函数和jitter函数
+
+```         
+boxplot(Sepal.Length~Species,
+        data = iris,
+        col = "white",border = colors,
+        boxwex = 0.5,
+        lwd = 1.5,
+        xlab = NULL)
+jitter_width <- 0.5#自定义抖动散点的宽度
+colors <- c('#1b80ad','#9c5555','#0c3c5f')#自定义散点的颜色
+
+points(jitter(as.numeric(factor(iris$Species)), factor = jitter_width), iris$Sepal.Length, 
+       col = alpha(colors[as.numeric(factor(iris$Species))],0.5), pch = 16)
+```
+
+## 4. 画添加拟合线的散点图(不用ggplot)
+
+### 4.1 导入数据
+
+```{r}
+data(iris)
+plot(iris$Sepal.Length,iris$Sepal.Width,lwd = 1,
+     xlab = "Sepal.Length",ylab = "Sepal.Width")
+fit <- lm(iris$Sepal.Width~iris$Sepal.Length)#线性回归拟合
+abline(fit,lwd = 2,col = "firebrick")#添加拟合线
+lmEq <- paste("y = ", round(coef(fit)[2], 2), "* x +", round(coef(fit)[1], 2))#构建回归方程
+text(x = 7, y = 4.2, labels = lmEq, col = "firebrick")#添加方程到指定位置
+```
+
+### 4.2 为不同分组着色 
+
+```{r}
+
+colors <- c('#1b80ad','#9c5555','#0c3c5f')#自定义散点的颜色
+plot(iris$Sepal.Length,iris$Sepal.Width,col = colors[iris$Species],
+     pch = 19,xlab = "Sepal.Length",ylab = "Sepal.Width")
+legend("topright", 
+       legend = c("setosa","virginica","versicolor"),#组别名称
+       col = c('#1b80ad','#9c5555','#0c3c5f'),#图例颜色, 
+       pch = c(19,19,19))
+```
+
+### 4.3 为不同的分组分别添加拟合线 
+
+```{r}
+#对不同分组进行着色
+colors <- c('#1b80ad','#9c5555','#0c3c5f')#自定义散点的颜色
+plot(iris$Sepal.Length,iris$Sepal.Width,col = colors[iris$Species],
+     pch = 19,xlab = "Sepal.Length",ylab = "Sepal.Width")
+#对每个分组分别添加拟合线
+groups <- unique(iris$Species)#获取分组值
+for (i in 1:length(groups)) {
+  #分组信息变成数值型并指定颜色
+  grp <- groups[i]
+  grp_col <- colors[i]
+  # 提取当前分组的数据
+  x_grp <- iris$Sepal.Length[iris$Species == grp]
+  y_grp <- iris$Sepal.Width[iris$Species == grp]
+  # 进行回归拟合
+  fit <- lm(y_grp ~ x_grp)
+  lines(x_grp, predict(fit), col = grp_col,lwd = 2)
+}
+#添加图例
+legend("topright", 
+       legend = c("setosa","virginica","versicolor"),#组别名称
+       col = c('#1b80ad','#9c5555','#0c3c5f'),#图例颜色, 
+       pch = c(19,19,19))
+```
